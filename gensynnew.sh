@@ -183,15 +183,26 @@ gensyn_fixed_run() {
         echo -e "${YELLOW}⚠️ GEN session already exists. Using existing session...${NC}"
     fi
 
+    # Define the core commands to run inside the tmux session for each iteration
+    # Ensure each command is separated by '&&' for sequential execution and error checking.
+    # The 'exec bash' at the end will keep the tmux pane open after the commands complete.
+    CORE_RUN_COMMANDS="
+        set -e
+        echo 'Starting Gensyn Fixed Run iteration...'
+        cd \"${HOME}/rl-swarm\" || { echo 'Error: Could not change directory to rl-swarm'; exit 1; }
+        python3 -m venv .venv || { echo 'Error: Venv creation failed'; exit 1; }
+        source .venv/bin/activate || { echo 'Error: Venv activation failed'; exit 1; }
+        pip install --force-reinstall transformers==4.51.3 trl==0.19.1 || { echo 'Error: Pip install failed'; exit 1; }
+        pip freeze || { echo 'Error: Pip freeze failed'; exit 1; }
+        bash run_rl_swarm.sh || { echo 'Error: run_rl_swarm.sh failed'; exit 1; }
+        echo 'Gensyn Fixed Run iteration completed.'
+        exec bash # Keep the tmux pane open after commands complete
+    "
+
     for i in 1 2 3; do
         echo -e "${CYAN}🔄 Run #${BOLD}${i}${NC}${CYAN} of 3...${NC}"
-        tmux send-keys -t GEN "cd ${HOME}/rl-swarm" C-m
-        
-        tmux send-keys -t GEN "python3 -m venv .venv" C-m
-        tmux send-keys -t GEN "source .venv/bin/activate" C-m
-        tmux send-keys -t GEN "pip install --force-reinstall transformers==4.51.3 trl==0.19.1" C-m
-        tmux send-keys -t GEN "pip freeze" C-m
-        tmux send-keys -t GEN "bash run_rl_swarm.sh" C-m
+        # Send the entire block of commands as a single string to tmux
+        tmux send-keys -t GEN "$CORE_RUN_COMMANDS" C-m
         
         if [ "$i" -lt 3 ]; then
             echo -e "${CYAN}Waiting for 5 seconds before next run...${NC}"
@@ -211,7 +222,7 @@ gensyn_fixed_run() {
 while true; do
     print_header # Display the main header
     echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}" # Updated Menu Title
+    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}"
     echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
     echo -e "${YELLOW}${BOLD}║ [${YELLOW}1${NC}${BOLD}] ${PINK}📦 Install All Dependencies               ${YELLOW}${BOLD}  ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [${YELLOW}2${NC}${BOLD}] ${PINK}🚀 Start GEN Tmux Session (Gensyn Node)  ${YELLOW}${BOLD}  ║${NC}"
