@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # ---------- Colors ----------
-YELLOW='\033[1;33m'     
-BOLD='\033[1m'          
-CYAN='\033[1;36m'       
-GREEN='\033[1;32m'      
-PINK='\033[38;5;198m'   
-RED='\033[1;31m'        
-MAGENTA='\033[1;35m'    
-NC='\033[0m'            
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+CYAN='\033[1;36m'
+GREEN='\033[1;32m'
+PINK='\033[38;5;198m'
+RED='\033[1;31m'
+MAGENTA='\033[1;35m'
+NC='\033[0m'
 
 # ---------- Header ----------
 print_header() {
@@ -25,20 +25,18 @@ print_header() {
 # ---------- Install dependencies ----------
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL DEPENDENCIES ==========${NC}"
-
-    # Basic packages
     sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip
+
+    # Node.js v20 setup
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install -y nodejs
 
     # Yarn installation
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
 
-    # Node.js v20
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt install -y nodejs
-
-    echo -e "${GREEN}✅ All dependencies installed (Python, Node.js v20, Yarn, etc.)!${NC}"
+    echo -e "${GREEN}✅ All dependencies installed!${NC}"
 }
 
 # ---------- Start GEN session ----------
@@ -134,73 +132,72 @@ restore_login_data() {
 # ---------- GENSYN FIXED RUN ----------
 gensyn_fixed_run() {
     echo -e "${GREEN}========== STEP 8: GENSYN FIXED RUN ==========${NC}"
-    if ! tmux has-session -t GEN 2>/dev/null; then
-        tmux new-session -d -s GEN
+    VENV_DIR="$HOME/rl-swarm/.venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        python3 -m venv "$VENV_DIR"
     fi
+    source "$VENV_DIR/bin/activate"
     CORE_RUN="
         cd $HOME/rl-swarm
-        python3 -m venv .venv
-        source .venv/bin/activate
         pip install --force-reinstall transformers==4.51.3 trl==0.19.1
         bash run_rl_swarm.sh
         exec bash
     "
+    if ! tmux has-session -t GEN 2>/dev/null; then
+        tmux new-session -d -s GEN
+    fi
     for i in 1 2 3; do
         tmux send-keys -t GEN "$CORE_RUN" C-m
         sleep 5
     done
     tmux attach-session -t GEN
+    deactivate
 }
 
-# ---------- Option 9: Download & Extract swarm.pem (venv + cached) ----------
+# ---------- Download, Extract & Move swarm.pem (Option 9) ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
 
-    DOWNLOAD_DIR="$HOME/pipe_downloads"
-    mkdir -p "$DOWNLOAD_DIR"
-
-    # Virtual environment path
+    # venv setup
     VENV_DIR="$HOME/rl-swarm/.venv"
     if [ ! -d "$VENV_DIR" ]; then
-        echo -e "${CYAN}🔧 Creating Python virtual environment...${NC}"
         python3 -m venv "$VENV_DIR"
     fi
-
     source "$VENV_DIR/bin/activate"
 
-    # Install gdown inside venv
-    echo -e "${CYAN}📦 Installing gdown in venv...${NC}"
-    pip install --upgrade gdown
+    # gdown install in venv
+    pip install --upgrade gdown --break-system-packages
 
-    # Ask for Drive link only if temp.zip does not exist
+    DOWNLOAD_DIR="$HOME/pipe_downloads"
+    mkdir -p "$DOWNLOAD_DIR"
     ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
+
+    # Download only if missing
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
-        echo -e "⚙️ Downloading zip file..."
         python -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
-        echo -e "⚠️ Zip file already downloaded. Using cached copy: $ZIP_FILE"
+        echo "⚠️ Using cached zip: $ZIP_FILE"
     fi
 
     EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
     mkdir -p "$EXTRACT_DIR"
     unzip -o "$ZIP_FILE" -d "$EXTRACT_DIR"
 
-    # Show folders with emoji + bold yellow
-    echo -e "${YELLOW}${BOLD}📂 Extracted folders:${NC}"
+    # Display folders with emoji & yellow bold text
+    echo -e "📂 Extracted folders:"
     folders=()
     i=1
     for f in "$EXTRACT_DIR"/*/; do
         [ -d "$f" ] || continue
         folders+=("$f")
-        echo -e "${YELLOW}${BOLD}$i) 📁 $(basename "$f")${NC}"
+        echo -e "${YELLOW}${BOLD}${i}) 📁 $(basename "$f")${NC}"
         ((i++))
     done
 
     read -p "👉 Enter folder number to move swarm.pem from: " sel
     SEL_FOLDER="${folders[$((sel-1))]}"
-
     if [ -f "$SEL_FOLDER/swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
         mv -f "$SEL_FOLDER/swarm.pem" "$HOME/rl-swarm/"
@@ -209,7 +206,7 @@ download_extract_swarm() {
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # copy temp-data if exists
+    # Copy temp-data if exists
     if [ -d "$SEL_FOLDER/temp-data" ]; then
         DEST="$HOME/rl-swarm/modal-login/"
         mkdir -p "$DEST"
@@ -221,7 +218,7 @@ download_extract_swarm() {
     deactivate
 }
 
-# ---------- Option 10: Move existing temp-data ----------
+# ---------- Move existing temp-data (Option 10) ----------
 move_temp_data() {
     SRC="$HOME/rl-swarm/modal-login/temp-data"
     DEST="$HOME/rl-swarm/modal-login/"
