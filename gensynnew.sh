@@ -26,10 +26,10 @@ print_header() {
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL DEPENDENCIES ==========${NC}"
 
-    # System packages
+    # Basic packages
     sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip
 
-    # Yarn
+    # Yarn installation
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
@@ -38,7 +38,7 @@ install_dependencies() {
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
 
-    echo -e "${GREEN}✅ All dependencies installed (Python, Yarn, Node.js v20)${NC}"
+    echo -e "${GREEN}✅ All dependencies installed (Python, Node.js v20, Yarn, etc.)!${NC}"
 }
 
 # ---------- Start GEN session ----------
@@ -152,49 +152,55 @@ gensyn_fixed_run() {
     tmux attach-session -t GEN
 }
 
-# ---------- Option 9: Download/Extract/Move swarm.pem ----------
+# ---------- Option 9: Download & Extract swarm.pem (venv + cached) ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
 
-    # unzip check
-    if ! command -v unzip >/dev/null 2>&1; then
-        sudo apt update && sudo apt install -y unzip
-    fi
-
-    # gdown install
-    python3 -m pip install --upgrade --user gdown
-
     DOWNLOAD_DIR="$HOME/pipe_downloads"
     mkdir -p "$DOWNLOAD_DIR"
-    ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
 
-    # Ask for download only if ZIP not exists
+    # Virtual environment path
+    VENV_DIR="$HOME/rl-swarm/.venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo -e "${CYAN}🔧 Creating Python virtual environment...${NC}"
+        python3 -m venv "$VENV_DIR"
+    fi
+
+    source "$VENV_DIR/bin/activate"
+
+    # Install gdown inside venv
+    echo -e "${CYAN}📦 Installing gdown in venv...${NC}"
+    pip install --upgrade gdown
+
+    # Ask for Drive link only if temp.zip does not exist
+    ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
         echo -e "⚙️ Downloading zip file..."
-        python3 -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
+        python -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
-        echo -e "⚠️ Using previously downloaded zip at $ZIP_FILE"
+        echo -e "⚠️ Zip file already downloaded. Using cached copy: $ZIP_FILE"
     fi
 
     EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
     mkdir -p "$EXTRACT_DIR"
     unzip -o "$ZIP_FILE" -d "$EXTRACT_DIR"
 
-    # Pretty folder listing
-    echo -e "📂 ${BOLD}${YELLOW}Extracted folders:${NC}"
+    # Show folders with emoji + bold yellow
+    echo -e "${YELLOW}${BOLD}📂 Extracted folders:${NC}"
     folders=()
     i=1
     for f in "$EXTRACT_DIR"/*/; do
         [ -d "$f" ] || continue
         folders+=("$f")
-        echo -e "${YELLOW}${BOLD}${i}) 📁 $(basename "$f")${NC}"
+        echo -e "${YELLOW}${BOLD}$i) 📁 $(basename "$f")${NC}"
         ((i++))
     done
 
     read -p "👉 Enter folder number to move swarm.pem from: " sel
     SEL_FOLDER="${folders[$((sel-1))]}"
+
     if [ -f "$SEL_FOLDER/swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
         mv -f "$SEL_FOLDER/swarm.pem" "$HOME/rl-swarm/"
@@ -203,7 +209,7 @@ download_extract_swarm() {
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # Copy temp-data if exists
+    # copy temp-data if exists
     if [ -d "$SEL_FOLDER/temp-data" ]; then
         DEST="$HOME/rl-swarm/modal-login/"
         mkdir -p "$DEST"
@@ -211,6 +217,8 @@ download_extract_swarm() {
         cp -r "$SEL_FOLDER/temp-data" "$DEST/"
         echo -e "${GREEN}✅ temp-data copied to $DEST${NC}"
     fi
+
+    deactivate
 }
 
 # ---------- Option 10: Move existing temp-data ----------
