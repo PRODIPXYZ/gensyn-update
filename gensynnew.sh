@@ -82,35 +82,37 @@ move_swarm_pem() {
     fi
 }
 
-# --- Function: Download swarm.pem from Google Drive (safe venv) ---
+# --- Function: Download swarm.pem from Google Drive using venv ---
 download_swarm_pem() {
-    # Create venv if not exists
     VENV_DIR="$HOME/gensyn_venv"
+    TMP_DIR="$HOME/gensyn_download"
+
+    # Create venv if not exists
     if [ ! -d "$VENV_DIR" ]; then
         echo -e "${CYAN}⚡ Creating virtual environment for gdown...${NC}"
         python3 -m venv "$VENV_DIR"
     fi
 
-    # Activate venv
-    source "$VENV_DIR/bin/activate"
-
-    # Upgrade pip and install gdown
-    pip install --upgrade pip
-    pip install gdown
+    # Upgrade pip and install gdown in venv
+    echo -e "${CYAN}📦 Installing/Upgrading gdown in venv...${NC}"
+    "$VENV_DIR/bin/pip" install --upgrade pip
+    "$VENV_DIR/bin/pip" install --upgrade gdown
 
     # Ask for Google Drive folder ID
     read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
 
-    # Temp download folder
-    TMP_DIR="$HOME/gensyn_download"
+    # Create temp download folder
     mkdir -p "$TMP_DIR"
     cd "$TMP_DIR" || exit
 
-    # Download swarm.pem using gdown inside venv
-    echo -e "${CYAN}⬇️ Downloading swarm.pem from Google Drive...${NC}"
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
+    # Run gdown using venv Python explicitly
+    echo -e "${CYAN}📂 Listing files in folder...${NC}"
+    "$VENV_DIR/bin/gdown" --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
 
-    # Move to rl-swarm
+    echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
+    "$VENV_DIR/bin/gdown" --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
+
+    # Move swarm.pem to rl-swarm
     if [ -f "swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
         mv swarm.pem "$HOME/rl-swarm/"
@@ -119,8 +121,6 @@ download_swarm_pem() {
         echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
     fi
 
-    # Deactivate venv
-    deactivate
     cd "$HOME" || exit
 }
 
@@ -135,8 +135,8 @@ check_gen_session_status() {
 
 # --- Function: Save login data ---
 save_login_data() {
-    src_path="${HOME}/rl-swarm/modal-login/temp-data"
-    dest_path="${HOME}/rl-swarm/backup-login"
+    src_path="$HOME/rl-swarm/modal-login/temp-data"
+    dest_path="$HOME/rl-swarm/backup-login"
     mkdir -p "$dest_path"
     cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
         && echo -e "${GREEN}✅ Backup saved in $dest_path${NC}" \
@@ -145,8 +145,8 @@ save_login_data() {
 
 # --- Function: Restore login data ---
 restore_login_data() {
-    src_path="${HOME}/rl-swarm/backup-login"
-    dest_path="${HOME}/rl-swarm/modal-login/temp-data"
+    src_path="$HOME/rl-swarm/backup-login"
+    dest_path="$HOME/rl-swarm/modal-login/temp-data"
     mkdir -p "$dest_path"
     cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
         && echo -e "${GREEN}✅ Backup restored to $dest_path${NC}" \
@@ -160,7 +160,7 @@ gensyn_fixed_run() {
     fi
 
     CORE_RUN_COMMANDS="
-        cd \"${HOME}/rl-swarm\" &&
+        cd \"$HOME/rl-swarm\" &&
         python3 -m venv .venv &&
         source .venv/bin/activate &&
         pip install --force-reinstall transformers==4.51.3 trl==0.19.1 &&
@@ -187,8 +187,8 @@ while true; do
     echo -e "${YELLOW}${BOLD}║ [5] ⬇️ Download swarm.pem from Google Drive  ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [6] 🔍 Check GEN Session Status              ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [7] 💾 Save Login Data (Backup)              ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)           ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)           ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)            ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                           ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 
@@ -204,7 +204,7 @@ while true; do
         8) restore_login_data ;;
         9) gensyn_fixed_run ;;
         0) exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option!${NC}";;
+        *) echo -e "${RED}❌ Invalid option!${NC}" ;;
     esac
     read -p "Press Enter to continue..."
 done
