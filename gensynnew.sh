@@ -25,17 +25,22 @@ print_header() {
 # ---------- Install dependencies ----------
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL DEPENDENCIES ==========${NC}"
-    sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip
-
-    # Node.js v20 setup
+    
+    # Basic packages
+    sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip software-properties-common build-essential
+    
+    # Node.js v20
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
-
-    # Yarn installation
+    
+    # Yarn
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
-
+    
+    # gdown in user scope
+    python3 -m pip install --upgrade --user gdown
+    
     echo -e "${GREEN}✅ All dependencies installed!${NC}"
 }
 
@@ -107,7 +112,7 @@ save_login_data() {
     dest="$HOME/rl-swarm/backup-login"
     if [[ -d "$src" ]]; then
         mkdir -p "$dest"
-        cp -r "$src" "$dest/"
+        rsync -a "$src/" "$dest/"
         echo -e "${GREEN}✅ temp-data backed up to $dest${NC}"
     else
         echo -e "${RED}❌ temp-data not found in $src${NC}"
@@ -117,82 +122,66 @@ save_login_data() {
 # ---------- Restore login data ----------
 restore_login_data() {
     echo -e "${GREEN}========== STEP 7: RESTORE LOGIN DATA ==========${NC}"
-    src="$HOME/rl-swarm/backup-login/temp-data"
+    src="$HOME/rl-swarm/backup-login/"
     dest="$HOME/rl-swarm/modal-login/"
     if [[ -d "$src" ]]; then
         mkdir -p "$dest"
-        rm -rf "$dest/temp-data"
-        cp -r "$src" "$dest/"
+        rsync -a "$src/" "$dest/"
         echo -e "${GREEN}✅ temp-data restored to $dest${NC}"
     else
-        echo -e "${RED}❌ Backup temp-data not found!${NC}"
+        echo -e "${RED}❌ Backup login data not found!${NC}"
     fi
 }
 
 # ---------- GENSYN FIXED RUN ----------
 gensyn_fixed_run() {
     echo -e "${GREEN}========== STEP 8: GENSYN FIXED RUN ==========${NC}"
-    VENV_DIR="$HOME/rl-swarm/.venv"
-    if [ ! -d "$VENV_DIR" ]; then
-        python3 -m venv "$VENV_DIR"
+    if ! tmux has-session -t GEN 2>/dev/null; then
+        tmux new-session -d -s GEN
     fi
-    source "$VENV_DIR/bin/activate"
     CORE_RUN="
         cd $HOME/rl-swarm
+        python3 -m venv .venv
+        source .venv/bin/activate
         pip install --force-reinstall transformers==4.51.3 trl==0.19.1
         bash run_rl_swarm.sh
         exec bash
     "
-    if ! tmux has-session -t GEN 2>/dev/null; then
-        tmux new-session -d -s GEN
-    fi
     for i in 1 2 3; do
         tmux send-keys -t GEN "$CORE_RUN" C-m
         sleep 5
     done
     tmux attach-session -t GEN
-    deactivate
 }
 
-# ---------- Download, Extract & Move swarm.pem (Option 9) ----------
+# ---------- Download, extract & move swarm.pem ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
-
-    # venv setup
-    VENV_DIR="$HOME/rl-swarm/.venv"
-    if [ ! -d "$VENV_DIR" ]; then
-        python3 -m venv "$VENV_DIR"
-    fi
-    source "$VENV_DIR/bin/activate"
-
-    # gdown install in venv
-    pip install --upgrade gdown --break-system-packages
-
     DOWNLOAD_DIR="$HOME/pipe_downloads"
-    mkdir -p "$DOWNLOAD_DIR"
     ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
+    EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
+    mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
 
-    # Download only if missing
+    # Ask for download only if file doesn't exist
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
-        python -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
+        echo -e "⚙️ Downloading zip file..."
+        python3 -m pip install --upgrade --user gdown
+        python3 -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
-        echo "⚠️ Using cached zip: $ZIP_FILE"
+        echo -e "⚠️ Zip already downloaded. Using cached copy."
     fi
 
-    EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
-    mkdir -p "$EXTRACT_DIR"
     unzip -o "$ZIP_FILE" -d "$EXTRACT_DIR"
 
-    # Display folders with emoji & yellow bold text
     echo -e "📂 Extracted folders:"
     folders=()
     i=1
     for f in "$EXTRACT_DIR"/*/; do
         [ -d "$f" ] || continue
         folders+=("$f")
-        echo -e "${YELLOW}${BOLD}${i}) 📁 $(basename "$f")${NC}"
+        echo -e "${YELLOW}${BOLD}📁 $i) $(basename "$f")${NC}"
         ((i++))
     done
 
@@ -206,25 +195,21 @@ download_extract_swarm() {
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # Copy temp-data if exists
+    # copy nested temp-data
     if [ -d "$SEL_FOLDER/temp-data" ]; then
         DEST="$HOME/rl-swarm/modal-login/"
         mkdir -p "$DEST"
-        rm -rf "$DEST/temp-data"
-        cp -r "$SEL_FOLDER/temp-data" "$DEST/"
+        rsync -a "$SEL_FOLDER/temp-data/" "$DEST/"
         echo -e "${GREEN}✅ temp-data copied to $DEST${NC}"
     fi
-
-    deactivate
 }
 
-# ---------- Move existing temp-data (Option 10) ----------
+# ---------- Move existing temp-data ----------
 move_temp_data() {
     SRC="$HOME/rl-swarm/modal-login/temp-data"
     DEST="$HOME/rl-swarm/modal-login/"
     if [ -d "$SRC" ]; then
-        rm -rf "$DEST/temp-data"
-        cp -r "$SRC" "$DEST/"
+        rsync -a "$SRC/" "$DEST/"
         echo -e "${GREEN}✅ temp-data moved to modal-login${NC}"
     else
         echo -e "${RED}❌ temp-data not found!${NC}"
