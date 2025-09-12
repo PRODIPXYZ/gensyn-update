@@ -25,12 +25,9 @@ print_header() {
     echo -e ""
 }
 
-# ---------- Install dependencies ----------
-install_dependencies() {
-    echo -e "${GREEN}Installing system packages...${NC}"
-    sudo apt update
-    sudo apt install -y sudo tmux python3 python3-pip python3-venv python3-distutils curl wget git lsof ufw screen gnupg
-}
+# --- IMPORTANT: Automatic installation of dependencies has been removed. ---
+# --- You must manually install them before running this script. ---
+# --- Run: sudo apt install -y sudo tmux python3 python3-pip python3-venv python3-distutils curl wget git lsof ufw screen gnupg ---
 
 # ---------- Start GEN Tmux ----------
 start_gen_session() {
@@ -78,17 +75,15 @@ move_swarm_pem() {
     fi
 }
 
-# ---------- Download swarm.pem from Google Drive (MODIFIED) ----------
+# ---------- Download swarm.pem from Google Drive (Requires gdown) ----------
 download_swarm_pem() {
     # Check for venv and create if it doesn't exist
     if [ ! -d "$VENVDIR" ]; then
         echo -e "${CYAN}⚡ Creating virtual environment for gdown...${NC}"
-        # This will create the venv and handle missing dependencies
+        # No dependency installation here. It relies on the user having python3-venv installed.
         python3 -m venv "$VENVDIR" || {
-            echo -e "${RED}❌ Failed to create virtual environment. Trying to install missing dependencies...${NC}"
-            sudo apt update
-            sudo apt install -y python3-venv python3-distutils
-            python3 -m venv "$VENVDIR"
+            echo -e "${RED}❌ Failed to create virtual environment. Make sure python3-venv is installed.${NC}"
+            return 1
         }
     fi
     
@@ -113,7 +108,6 @@ download_swarm_pem() {
     mkdir -p "$TMPDIR" && cd "$TMPDIR"
 
     echo -e "${CYAN}📂 Listing files in folder...${NC}"
-    # Try with both --folder and --url flags for better compatibility
     gdown --folder "$FOLDER" --quiet --dry-run || gdown --url "$FOLDER" --quiet --dry-run
     
     echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
@@ -188,6 +182,7 @@ while true; do
     echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵        ║${NC}"
     echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
     echo -e "${YELLOW}${BOLD}║ [1] 📦 Install All Dependencies              ║${NC}"
+    echo -e "${YELLOW}${BOLD}║      (Manual Installation Only)              ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [2] 🚀 Start GEN Tmux Session                ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [3] 🔐 Start LOC Tmux Session                ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [4] 📂 Move swarm.pem to rl-swarm/           ║${NC}"
@@ -201,7 +196,7 @@ while true; do
 
     read -p "👉 Enter your choice [0-9]: " choice
     case $choice in
-        1) install_dependencies ;;
+        1) echo -e "${CYAN}Please manually run the installation command to install dependencies.${NC}";;
         2) start_gen_session ;;
         3) start_loc_session ;;
         4) move_swarm_pem ;;
