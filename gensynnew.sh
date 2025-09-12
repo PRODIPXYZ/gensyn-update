@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 
 # ---------- Colors ----------
 YELLOW='\033[1;33m'
@@ -26,7 +26,6 @@ print_header() {
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL DEPENDENCIES ==========${NC}"
     
-    # Basic packages
     sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip software-properties-common build-essential
     
     # Node.js v20
@@ -85,8 +84,8 @@ move_swarm_pem() {
     echo -e "${GREEN}========== STEP 4: MOVE SWARM.PEM ==========${NC}"
     if [ -f "swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
-        mv -f swarm.pem "$HOME/rl-swarm/"
-        echo -e "${GREEN}✅ swarm.pem moved to $HOME/rl-swarm/${NC}"
+        cp -f swarm.pem "$HOME/rl-swarm/"
+        echo -e "${GREEN}✅ swarm.pem copied to $HOME/rl-swarm/${NC}"
     else
         echo -e "${RED}❌ swarm.pem not found!${NC}"
     fi
@@ -151,7 +150,7 @@ gensyn_fixed_run() {
     tmux attach-session -t GEN
 }
 
-# ---------- Download, extract & move swarm.pem (with venv) ----------
+# ---------- Download, extract & copy swarm.pem + temp-data ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
     DOWNLOAD_DIR="$HOME/pipe_downloads"
@@ -166,11 +165,9 @@ download_extract_swarm() {
     fi
     source "$VENV_DIR/bin/activate"
 
-    # install gdown inside venv
     pip install --upgrade pip
     pip install gdown
 
-    # download only if zip not exists
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
@@ -192,22 +189,27 @@ download_extract_swarm() {
         ((i++))
     done
 
-    read -p "👉 Enter folder number to move swarm.pem from: " sel
+    read -p "👉 Enter folder number to copy swarm.pem from: " sel
     SEL_FOLDER="${folders[$((sel-1))]}"
+
+    # swarm.pem copy
     if [ -f "$SEL_FOLDER/swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
-        mv -f "$SEL_FOLDER/swarm.pem" "$HOME/rl-swarm/"
-        echo -e "${GREEN}✅ swarm.pem moved to $HOME/rl-swarm/${NC}"
+        cp -f "$SEL_FOLDER/swarm.pem" "$HOME/rl-swarm/"
+        echo -e "${GREEN}✅ swarm.pem copied to $HOME/rl-swarm/${NC}"
     else
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # copy nested temp-data
+    # temp-data copy (replace old)
     if [ -d "$SEL_FOLDER/temp-data" ]; then
-        DEST="$HOME/rl-swarm/modal-login/"
-        mkdir -p "$DEST"
-        rsync -a "$SEL_FOLDER/temp-data/" "$DEST/"
-        echo -e "${GREEN}✅ temp-data copied to $DEST${NC}"
+        DEST="$HOME/rl-swarm/modal-login/temp-data"
+        rm -rf "$DEST"
+        mkdir -p "$(dirname "$DEST")"
+        cp -r "$SEL_FOLDER/temp-data" "$HOME/rl-swarm/modal-login/"
+        echo -e "${GREEN}✅ temp-data copied & replaced at $HOME/rl-swarm/modal-login/temp-data/${NC}"
+    else
+        echo -e "${RED}❌ No temp-data folder found in selected folder!${NC}"
     fi
 
     deactivate
@@ -229,17 +231,17 @@ move_temp_data() {
 while true; do
     print_header
     echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}"
+    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵        ║${NC}"
     echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}${BOLD}║ [1] 📦 Install All Dependencies                 ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [2] 🚀 Start GEN Tmux Session (Gensyn Node)    ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [3] 🔐 Start LOC Tmux Session (Firewall+Tunnel) ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [4] 📂 Move swarm.pem to rl-swarm/             ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [1] 📦 Install All Dependencies               ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [2] 🚀 Start GEN Tmux Session (Gensyn Node)   ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [3] 🔐 Start LOC Tmux Session (Firewall+Tunnel)║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [4] 📂 Copy swarm.pem to rl-swarm/            ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [5] 🔍 Check GEN Session Status               ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [6] 💾 Save Login Data (Backup)               ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [7] ♻️ Restore Login Data (Backup)             ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [8] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [9] 📥 Download, Extract & Move swarm.pem     ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [8] 🛠️ GENSYN FIXED RUN (3 Times)             ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [9] 📥 Download, Extract & Copy swarm.pem+temp║${NC}"
     echo -e "${YELLOW}${BOLD}║ [10] 📂 Move temp-data to modal-login          ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                             ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
