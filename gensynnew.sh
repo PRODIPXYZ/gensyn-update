@@ -113,38 +113,39 @@ move_swarm_pem_local() {
     return 0
 }
 
-# --- Function: Setup & Download swarm.pem from Google Drive ---
+# --- Function: Download swarm.pem from Google Drive using rclone ---
 move_swarm_pem_gdrive() {
-    echo -e "${GREEN}========== STEP 5: GOOGLE DRIVE SETUP + DOWNLOAD ==========${NC}"
+    echo -e "${GREEN}========== STEP 5: RCLONE GOOGLE DRIVE SETUP + DOWNLOAD ==========${NC}"
 
-    # Step 1: Install gdrive if not installed
-    if ! command -v gdrive &>/dev/null; then
-        echo -e "${CYAN}⬇️ Installing gdrive CLI...${NC}"
-        sudo wget -O /usr/local/bin/gdrive https://github.com/prasmussen/gdrive/releases/download/2.1.1/gdrive-linux-x64
-        sudo chmod +x /usr/local/bin/gdrive
-        echo -e "${GREEN}✅ gdrive installed.${NC}"
+    # Step 1: Install rclone if not installed
+    if ! command -v rclone &>/dev/null; then
+        echo -e "${CYAN}⬇️ Installing rclone...${NC}"
+        curl https://rclone.org/install.sh | sudo bash
+        echo -e "${GREEN}✅ rclone installed.${NC}"
     else
-        echo -e "${GREEN}✅ gdrive already installed.${NC}"
+        echo -e "${GREEN}✅ rclone already installed.${NC}"
     fi
 
-    # Step 2: Authenticate gdrive if first time
-    if ! gdrive list &>/dev/null; then
-        echo -e "${CYAN}🔑 First-time gdrive authentication required...${NC}"
-        gdrive list
-        echo -e "${GREEN}✅ Authentication complete.${NC}"
+    # Step 2: Check if config exists
+    if [ ! -f ~/.config/rclone/rclone.conf ]; then
+        echo -e "${CYAN}🔑 First-time rclone setup required...${NC}"
+        rclone config
+        echo -e "${GREEN}✅ rclone configuration complete.${NC}"
     fi
 
-    # Step 3: Ask for MY GENSYN folder ID
-    read -p "${PINK}👉 Enter Google Drive MY GENSYN Folder ID: ${NC}" FOLDER_ID
-    if [ -z "$FOLDER_ID" ]; then
-        echo -e "${RED}❌ Folder ID cannot be empty!${NC}"
+    # Step 3: Ask remote and folder
+    read -p "${PINK}👉 Enter your rclone remote name (e.g., mygensyn): ${NC}" REMOTE_NAME
+    read -p "${PINK}👉 Enter the folder path inside remote (MY GENSYN folder): ${NC}" FOLDER_PATH
+    if [ -z "$REMOTE_NAME" ] || [ -z "$FOLDER_PATH" ]; then
+        echo -e "${RED}❌ Remote name and folder path cannot be empty!${NC}"
         return 1
     fi
 
     # Step 4: List subfolders
-    mapfile -t folders < <(gdrive list --query "'$FOLDER_ID' in parents and mimeType='application/vnd.google-apps.folder'" --no-header | awk '{print $2}')
+    echo -e "${CYAN}📂 Fetching subfolders...${NC}"
+    mapfile -t folders < <(rclone lsf "$REMOTE_NAME:$FOLDER_PATH/" --dirs-only)
     if [ ${#folders[@]} -eq 0 ]; then
-        echo -e "${RED}❌ No folders found in MY GENSYN folder!${NC}"
+        echo -e "${RED}❌ No subfolders found in the specified folder!${NC}"
         return 1
     fi
 
@@ -160,44 +161,95 @@ move_swarm_pem_gdrive() {
     fi
 
     CHOSEN_FOLDER="${folders[$((choice-1))]}"
-    FILE_ID=$(gdrive list --query "'$CHOSEN_FOLDER' in parents" --no-header | grep -i swarm.pem | awk '{print $1}')
-    if [ -z "$FILE_ID" ]; then
-        echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
-        return 1
-    fi
-
     mkdir -p "$HOME/rl-swarm"
-    echo -e "${CYAN}⬇️ Downloading swarm.pem to rl-swarm...${NC}"
-    if gdrive download "$FILE_ID" --path "$HOME/rl-swarm/" &>/dev/null; then
-        echo -e "${GREEN}✅ swarm.pem downloaded successfully to ${BOLD}$HOME/rl-swarm/${NC}"
+    echo -e "${CYAN}⬇️ Downloading swarm.pem from selected folder...${NC}"
+    rclone copy "$REMOTE_NAME:$FOLDER_PATH/$CHOSEN_FOLDER/swarm.pem" "$HOME/rl-swarm/"
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ swarm.pem downloaded successfully to $HOME/rl-swarm/${NC}"
     else
-        echo -e "${RED}❌ Failed to download swarm.pem.${NC}"
+        echo -e "${RED}❌ Failed to download swarm.pem. Check folder/file path.${NC}"
         return 1
     fi
+    return 0
 }
 
-# --- Placeholder for other functions (check_gen_session_status, save_login_data, restore_login_data, gensyn_fixed_run) ---
-# Copy the previous implementations here
+# --- Function: Check GEN session status ---
+check_gen_session_status() {
+    echo -e "${GREEN}========== STEP 6: CHECK GEN SESSION STATUS ==========${NC}"
+    if tmux has-session -t GEN 2>/dev/null; then
+        echo -e "${GREEN}✅ GEN session is running.${NC}"
+    else
+        echo -e "${RED}❌ GEN session is NOT running.${NC}"
+    fi
+    return 0
+}
 
-# --- Main Menu Loop ---
+# --- Function: Save login data ---
+save_login_data() {
+    echo -e "${GREEN}========== STEP 7: SAVE LOGIN DATA ==========${NC}"
+    src_path="${HOME}/rl-swarm/modal-login/temp-data"
+    dest_path="${HOME}/rl-swarm/backup-login"
+    mkdir -p "$dest_path"
+    cp "$src_path/userApiKey.json" "$dest_path/" 2>/dev/null
+    cp "$src_path/userData.json" "$dest_path/" 2>/dev/null
+    echo -e "${GREEN}✅ Login data backed up to $dest_path${NC}"
+    return 0
+}
+
+# --- Function: Restore login data ---
+restore_login_data() {
+    echo -e "${GREEN}========== STEP 8: RESTORE LOGIN DATA ==========${NC}"
+    src_path="${HOME}/rl-swarm/backup-login"
+    dest_path="${HOME}/rl-swarm/modal-login/temp-data"
+    mkdir -p "$dest_path"
+    cp "$src_path/userApiKey.json" "$dest_path/" 2>/dev/null
+    cp "$src_path/userData.json" "$dest_path/" 2>/dev/null
+    echo -e "${GREEN}✅ Login data restored to $dest_path${NC}"
+    return 0
+}
+
+# --- Function: GENSYN FIXED RUN (3 Times) ---
+gensyn_fixed_run() {
+    echo -e "${GREEN}========== STEP 9: GENSYN FIXED RUN ==========${NC}"
+    if ! tmux has-session -t GEN 2>/dev/null; then
+        tmux new-session -d -s GEN
+    fi
+    CORE_RUN_COMMANDS="
+        set -e
+        cd \"${HOME}/rl-swarm\" || exit 1
+        python3 -m venv .venv
+        source .venv/bin/activate
+        pip install --force-reinstall transformers==4.51.3 trl==0.19.1
+        bash run_rl_swarm.sh
+        exec bash
+    "
+    for i in 1 2 3; do
+        echo -e "${CYAN}🔄 Run #${i} of 3...${NC}"
+        tmux send-keys -t GEN "$CORE_RUN_COMMANDS" C-m
+        [ "$i" -lt 3 ] && sleep 5
+    done
+    tmux attach-session -t GEN
+    return 0
+}
+
+# --- Main Menu ---
 while true; do
     print_header
     echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════════════╗${NC}"
     echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}"
     echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}1${NC}${BOLD}] 📦 Install All Dependencies             ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}2${NC}${BOLD}] 🚀 Start GEN Tmux Session               ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}3${NC}${BOLD}] 🔐 Start LOC Tmux Session               ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}4${NC}${BOLD}] 📂 Move swarm.pem locally                ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}5${NC}${BOLD}] ⬇️ Download swarm.pem from Google Drive ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}6${NC}${BOLD}] 🔍 Check GEN Session Status             ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}7${NC}${BOLD}] 💾 Save Login Data (Backup)             ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}8${NC}${BOLD}] ♻️ Restore Login Data (Backup)           ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}9${NC}${BOLD}] 🛠️ GENSYN FIXED RUN (3 Times)          ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}0${NC}${BOLD}] 👋 Exit Script                           ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}1${NC}${BOLD}] 📦 Install All Dependencies             ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}2${NC}${BOLD}] 🚀 Start GEN Tmux Session               ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}3${NC}${BOLD}] 🔐 Start LOC Tmux Session               ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}4${NC}${BOLD}] 📂 Move Local swarm.pem                  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}5${NC}${BOLD}] 🌐 Download swarm.pem from Google Drive  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}6${NC}${BOLD}] 🔍 Check GEN Session Status             ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}7${NC}${BOLD}] 💾 Save Login Data                       ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}8${NC}${BOLD}] ♻️ Restore Login Data                     ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}9${NC}${BOLD}] 🛠️ GENSYN FIXED RUN (3 Times)           ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}0${NC}${BOLD}] 👋 Exit Script                           ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
     echo -e ""
-
     read -p "${PINK}👉 Enter your choice [0-9]: ${NC}" choice
     case $choice in
         1) install_dependencies ;;
@@ -210,7 +262,7 @@ while true; do
         8) restore_login_data ;;
         9) gensyn_fixed_run ;;
         0) echo -e "${CYAN}🚪 Exiting... Goodbye! 👋${NC}"; exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option! Please enter a number between 0-9.${NC}" ;;
+        *) echo -e "${RED}❌ Invalid option! Please enter 0-9.${NC}" ;;
     esac
     echo -e ""
     read -p "${CYAN}Press Enter to continue...${NC}"
