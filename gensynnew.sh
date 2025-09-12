@@ -18,7 +18,7 @@ print_header() {
     clear
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
     echo -e "${YELLOW}${BOLD} # # # # # 🟡 BENGAL AIRDROP GENSYN 🟡 # # # # #${NC}"
-    echo -e "${YELLOW}${BOLD} # # # # # #   MADE BY PRODIP   # # # # # #${NC}"
+    echo -e "${YELLOW}${BOLD} # # # # # #    MADE BY PRODIP    # # # # # #${NC}"
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
     echo -e "${CYAN}🌐 Follow on Twitter : https://x.com/prodipmandal10${NC}"
     echo -e "${CYAN}📩 DM on Telegram    : @prodipgo${NC}"
@@ -78,24 +78,32 @@ move_swarm_pem() {
     fi
 }
 
-# ---------- Download swarm.pem from Google Drive ----------
+# ---------- Download swarm.pem from Google Drive (MODIFIED) ----------
 download_swarm_pem() {
-    # Check for venv
+    # Check for venv and create if it doesn't exist
     if [ ! -d "$VENVDIR" ]; then
         echo -e "${CYAN}⚡ Creating virtual environment for gdown...${NC}"
-        python3 -m venv "$VENVDIR" 2>/tmp/venv_err
-        if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}Installing missing venv dependencies...${NC}"
+        # This will create the venv and handle missing dependencies
+        python3 -m venv "$VENVDIR" || {
+            echo -e "${RED}❌ Failed to create virtual environment. Trying to install missing dependencies...${NC}"
+            sudo apt update
             sudo apt install -y python3-venv python3-distutils
             python3 -m venv "$VENVDIR"
-        fi
+        }
+    fi
+    
+    # Check if venv was created successfully
+    if [ ! -d "$VENVDIR" ]; then
+        echo -e "${RED}❌ Virtual environment could not be created. Exiting.${NC}"
+        return 1
     fi
 
     # Activate venv
     source "$VENVDIR/bin/activate"
 
     # Install gdown inside venv
-    pip install --upgrade pip
+    echo -e "${CYAN}Installing gdown package...${NC}"
+    pip install --upgrade pip --quiet
     pip install gdown --quiet
 
     # Ask for Google Drive Folder ID or URL
@@ -105,10 +113,11 @@ download_swarm_pem() {
     mkdir -p "$TMPDIR" && cd "$TMPDIR"
 
     echo -e "${CYAN}📂 Listing files in folder...${NC}"
-    gdown --folder "$FOLDER" --quiet --dry-run
-
+    # Try with both --folder and --url flags for better compatibility
+    gdown --folder "$FOLDER" --quiet --dry-run || gdown --url "$FOLDER" --quiet --dry-run
+    
     echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
-    gdown --folder "$FOLDER" --fuzzy --quiet
+    gdown --folder "$FOLDER" --fuzzy --quiet || gdown --url "$FOLDER" --fuzzy --quiet
 
     if [ -f "swarm.pem" ]; then
         mkdir -p "$BASE_DIR"
@@ -182,11 +191,11 @@ while true; do
     echo -e "${YELLOW}${BOLD}║ [2] 🚀 Start GEN Tmux Session                ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [3] 🔐 Start LOC Tmux Session                ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [4] 📂 Move swarm.pem to rl-swarm/           ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [5] ⬇️ Download swarm.pem from Google Drive  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [5] ⬇️ Download swarm.pem from Google Drive ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [6] 🔍 Check GEN Session Status              ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [7] 💾 Save Login Data (Backup)              ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)           ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)           ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)            ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                           ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 
