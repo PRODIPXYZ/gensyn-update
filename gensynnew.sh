@@ -1,31 +1,30 @@
 #!/bin/bash
 
-# Color codes (Re-using the successful palette from previous scripts)
-YELLOW='\033[1;33m'     # Bold Yellow
-BOLD='\033[1m'          # General Bold
-CYAN='\033[1;36m'       # Bold Cyan
-GREEN='\033[1;32m'      # Bold Green
-PINK='\033[38;5;198m'   # Deep Pink (Using 256-color code for specific shade)
-RED='\033[1;31m'        # Bold Red
-MAGENTA='\033[1;35m'    # Bold Magenta (For helper messages/special info)
-NC='\033[0m'            # No Color
+# Color codes
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+CYAN='\033[1;36m'
+GREEN='\033[1;32m'
+PINK='\033[38;5;198m'
+RED='\033[1;31m'
+MAGENTA='\033[1;35m'
+NC='\033[0m'
 
 # --- Function to print the main header ---
 print_header() {
-    clear # Clear screen to ensure header is always at the top
+    clear
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
     echo -e "${YELLOW}${BOLD} # # # # # 🟡 BENGAL AIRDROP GENSYN 🟡 # # # # #${NC}"
     echo -e "${YELLOW}${BOLD} # # # # # #   MADE BY PRODIP   # # # # # #${NC}"
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
     echo -e "${CYAN}🌐 Follow on Twitter : https://x.com/prodipmandal10${NC}"
-    echo -e "${CYAN}📩 DM on Telegram    : @prodipgo${NC}"
+    echo -e "${CYAN}📩 DM on Telegram    : @prodipgo${NC}"
     echo -e ""
 }
 
 # --- Function: Install all dependencies ---
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL ALL DEPENDENCIES ==========${NC}"
-    echo -e "${CYAN}🔧 Installing dependencies...${NC}"
     sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg
 
     echo -e "${CYAN}📦 Installing Yarn...${NC}"
@@ -34,24 +33,14 @@ install_dependencies() {
     sudo apt update && sudo apt install -y yarn
 
     echo -e "${CYAN}🚀 Running Gensyn node setup script from ABHIEBA...${NC}"
-    if curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash; then
-        echo -e "${GREEN}✅ Gensyn node setup script completed.${NC}"
-    else
-        echo -e "${RED}❌ Gensyn node setup script failed. Please check the output above.${NC}"
-        return 1
-    fi
-
-    echo -e "${GREEN}✅ All dependencies installed!${NC}"
-    return 0
+    curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash
 }
 
-# --- Function: Start GEN tmux session (Gensyn Node) ---
+# --- Function: Start GEN tmux session ---
 start_gen_session() {
-    echo -e "${GREEN}========== STEP 2: START GEN TMUX SESSION ==========${NC}"
     if tmux has-session -t GEN 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ GEN session already exists. Attaching to existing session...${NC}"
+        echo -e "${YELLOW}⚠️ GEN session already exists.${NC}"
     else
-        echo -e "${CYAN}🚀 Creating GEN session and running Gensyn node...${NC}"
         tmux new-session -d -s GEN "bash -c '
             cd \$HOME &&
             rm -rf gensyn-testnet &&
@@ -60,195 +49,149 @@ start_gen_session() {
             ./gensyn-testnet/gensyn.sh;
             exec bash
         '"
-        echo -e "${GREEN}✅ GEN session started! Attaching...${NC}"
     fi
-    sleep 1
     tmux attach-session -t GEN
-    return 0
 }
 
-# --- Function: Start LOC tmux session (Firewall + Tunnel) ---
+# --- Function: Start LOC tmux session ---
 start_loc_session() {
-    echo -e "${GREEN}========== STEP 3: START LOC TMUX SESSION ==========${NC}"
     if tmux has-session -t LOC 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ LOC session already exists. Attaching to existing session...${NC}"
+        echo -e "${YELLOW}⚠️ LOC session already exists.${NC}"
     else
-        echo -e "${CYAN}🔐 Starting LOC session (Firewall + Cloudflare Tunnel)...${NC}"
         tmux new-session -d -s LOC "bash -c '
-            echo \"Configuring UFW firewall...\" &&
             sudo ufw allow 22 &&
             sudo ufw allow 3000/tcp &&
             echo y | sudo ufw enable &&
-            echo \"Firewall configured.\" &&
-            echo \"Installing Cloudflared...\" &&
             wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb &&
             sudo dpkg -i cloudflared-linux-amd64.deb &&
-            echo \"Cloudflared installed.\" &&
-            echo \"Starting Cloudflared tunnel...\" &&
             cloudflared tunnel --url http://localhost:3000;
             exec bash
         '"
-        echo -e "${GREEN}✅ LOC session started! Attaching...${NC}"
     fi
-    sleep 1
     tmux attach-session -t LOC
-    return 0
 }
 
-# --- Function: Move swarm.pem to rl-swarm/ ---
+# --- Function: Move swarm.pem manually ---
 move_swarm_pem() {
-    echo -e "${GREEN}========== STEP 4: MOVE SWARM.PEM ==========${NC}"
-    echo -e "${CYAN}📂 Moving swarm.pem to rl-swarm/ directory...${NC}"
     if [ -f "swarm.pem" ]; then
         mkdir -p rl-swarm
-        if mv swarm.pem rl-swarm/; then
-            echo -e "${GREEN}✅ swarm.pem moved successfully to rl-swarm/!${NC}"
-        else
-            echo -e "${RED}❌ Failed to move swarm.pem. Check permissions or path.${NC}"
-            return 1
-        fi
+        mv swarm.pem rl-swarm/
+        echo -e "${GREEN}✅ swarm.pem moved successfully!${NC}"
     else
-        echo -e "${RED}❌ swarm.pem not found in the current directory!${NC}"
-        return 1
+        echo -e "${RED}❌ swarm.pem not found!${NC}"
     fi
-    return 0
 }
 
-# --- Function: Check if GEN session is running ---
+# --- Function: Download swarm.pem from Google Drive ---
+download_swarm_pem() {
+    echo -e "${CYAN}🔧 Checking gdown...${NC}"
+    if ! command -v gdown &> /dev/null; then
+        echo -e "${YELLOW}Installing gdown...${NC}"
+        pip install gdown || (apt-get update && apt-get install -y python3-pip && pip install gdown)
+    fi
+
+    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
+    TMP_DIR="gdrive_temp"
+    mkdir -p $TMP_DIR && cd $TMP_DIR
+
+    echo -e "${CYAN}📂 Listing files...${NC}"
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
+
+    echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
+
+    if [ -f "swarm.pem" ]; then
+        mkdir -p ../rl-swarm
+        mv swarm.pem ../rl-swarm/
+        echo -e "${GREEN}✅ swarm.pem downloaded & moved to rl-swarm/${NC}"
+    else
+        echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
+    fi
+
+    cd ..
+}
+
+# --- Function: Check GEN session status ---
 check_gen_session_status() {
-    echo -e "${GREEN}========== STEP 5: CHECK GEN SESSION STATUS ==========${NC}"
-    echo -e "${CYAN}🔍 Checking GEN tmux session status...${NC}"
     if tmux has-session -t GEN 2>/dev/null; then
         echo -e "${GREEN}✅ GEN session is running.${NC}"
     else
         echo -e "${RED}❌ GEN session is NOT running.${NC}"
     fi
-    return 0
 }
 
-# --- Function: Save login data (Backup userApiKey.json & userData.json) ---
+# --- Function: Save login data ---
 save_login_data() {
-    echo -e "${GREEN}========== STEP 6: SAVE LOGIN DATA (BACKUP) ==========${NC}"
-    echo -e "${CYAN}📦 Saving login data...${NC}"
     src_path="${HOME}/rl-swarm/modal-login/temp-data"
     dest_path="${HOME}/rl-swarm/backup-login"
-
-    if [[ -f "$src_path/userApiKey.json" && -f "$src_path/userData.json" ]]; then
-        mkdir -p "$dest_path"
-        if cp "$src_path/userApiKey.json" "$dest_path/" && cp "$src_path/userData.json" "$dest_path/"; then
-            echo -e "${GREEN}✅ Login data backed up to: ${BOLD}${dest_path}${NC}${GREEN}!${NC}"
-        else
-            echo -e "${RED}❌ Failed to copy login data. Check permissions or paths.${NC}"
-            return 1
-        fi
-    else
-        echo -e "${RED}❌ Login data files not found in ${BOLD}${src_path}${NC}${RED}!${NC}"
-        return 1
-    fi
-    return 0
+    mkdir -p "$dest_path"
+    cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
+        && echo -e "${GREEN}✅ Backup saved in $dest_path${NC}" \
+        || echo -e "${RED}❌ Login data not found!${NC}"
 }
 
-# --- Function: Restore login data (Bring back userApiKey.json & userData.json) ---
+# --- Function: Restore login data ---
 restore_login_data() {
-    echo -e "${GREEN}========== STEP 7: RESTORE LOGIN DATA (BACKUP) ==========${NC}"
-    echo -e "${CYAN}♻️ Restoring login data...${NC}"
     src_path="${HOME}/rl-swarm/backup-login"
     dest_path="${HOME}/rl-swarm/modal-login/temp-data"
-
-    if [[ -f "$src_path/userApiKey.json" && -f "$src_path/userData.json" ]]; then
-        mkdir -p "$dest_path"
-        if cp "$src_path/userApiKey.json" "$dest_path/" && cp "$src_path/userData.json" "$dest_path/"; then
-            echo -e "${GREEN}✅ Login data restored to: ${BOLD}${dest_path}${NC}${GREEN}!${NC}"
-        else
-            echo -e "${RED}❌ Failed to copy backup files. Check permissions or paths.${NC}"
-            return 1
-        fi
-    else
-        echo -e "${RED}❌ Backup files not found in ${BOLD}${src_path}${NC}${RED}!${NC}"
-        echo -e "${YELLOW}Please ensure you have previously saved login data using Option 6.${NC}"
-        return 1
-    fi
-    return 0
+    mkdir -p "$dest_path"
+    cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
+        && echo -e "${GREEN}✅ Backup restored to $dest_path${NC}" \
+        || echo -e "${RED}❌ Backup files not found!${NC}"
 }
 
-# --- Function: GENSYN FIXED RUN ---
+# --- Function: Gensyn Fixed Run ---
 gensyn_fixed_run() {
-    echo -e "${GREEN}========== STEP 8: GENSYN FIXED RUN (3 TIMES) ==========${NC}"
-    echo -e "${CYAN}🚀 GENSYN FIXED RUN started in GEN tmux session, running 3 times...${NC}"
-
     if ! tmux has-session -t GEN 2>/dev/null; then
-        echo -e "${MAGENTA}🛠️ GEN session not found. Creating a new one...${NC}"
-        tmux new-session -d -s GEN || { echo -e "${RED}❌ Failed to create GEN session.${NC}"; return 1; }
-    else
-        echo -e "${YELLOW}⚠️ GEN session already exists. Using existing session...${NC}"
+        tmux new-session -d -s GEN
     fi
 
-    # Define the core commands to run inside the tmux session for each iteration
-    # Ensure each command is separated by '&&' for sequential execution and error checking.
-    # The 'exec bash' at the end will keep the tmux pane open after the commands complete.
     CORE_RUN_COMMANDS="
-        set -e
-        echo 'Starting Gensyn Fixed Run iteration...'
-        cd \"${HOME}/rl-swarm\" || { echo 'Error: Could not change directory to rl-swarm'; exit 1; }
-        python3 -m venv .venv || { echo 'Error: Venv creation failed'; exit 1; }
-        source .venv/bin/activate || { echo 'Error: Venv activation failed'; exit 1; }
-        pip install --force-reinstall transformers==4.51.3 trl==0.19.1 || { echo 'Error: Pip install failed'; exit 1; }
-        pip freeze || { echo 'Error: Pip freeze failed'; exit 1; }
-        bash run_rl_swarm.sh || { echo 'Error: run_rl_swarm.sh failed'; exit 1; }
-        echo 'Gensyn Fixed Run iteration completed.'
-        exec bash # Keep the tmux pane open after commands complete
+        cd \"${HOME}/rl-swarm\" &&
+        python3 -m venv .venv &&
+        source .venv/bin/activate &&
+        pip install --force-reinstall transformers==4.51.3 trl==0.19.1 &&
+        bash run_rl_swarm.sh;
+        exec bash
     "
-
     for i in 1 2 3; do
-        echo -e "${CYAN}🔄 Run #${BOLD}${i}${NC}${CYAN} of 3...${NC}"
-        # Send the entire block of commands as a single string to tmux
         tmux send-keys -t GEN "$CORE_RUN_COMMANDS" C-m
-        
-        if [ "$i" -lt 3 ]; then
-            echo -e "${CYAN}Waiting for 5 seconds before next run...${NC}"
-            sleep 5
-        fi
+        sleep 5
     done
-
-    echo -e "${GREEN}✅ All 3 GENSYN FIXED RUN iterations initiated.${NC}"
-    echo -e "${CYAN}Attaching to GEN session to monitor output. Press Ctrl+b then d to detach.${NC}"
-    sleep 1 # Give tmux a moment
     tmux attach-session -t GEN
-    return 0
 }
-
 
 # --- Main Menu Loop ---
 while true; do
-    print_header # Display the main header
+    print_header
     echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}"
+    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵        ║${NC}"
     echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}1${NC}${BOLD}] ${PINK}📦 Install All Dependencies               ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}2${NC}${BOLD}] ${PINK}🚀 Start GEN Tmux Session (Gensyn Node)  ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}3${NC}${BOLD}] ${PINK}🔐 Start LOC Tmux Session (Firewall+Tunnel) ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}4${NC}${BOLD}] ${PINK}📂 Move swarm.pem to rl-swarm/           ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}5${NC}${BOLD}] ${PINK}🔍 Check GEN Session Status             ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}6${NC}${BOLD}] ${PINK}💾 Save Login Data (Backup)             ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}7${NC}${BOLD}] ${PINK}♻️ Restore Login Data (Backup)           ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}8${NC}${BOLD}] ${PINK}🛠️ GENSYN FIXED RUN (3 Times)          ${YELLOW}${BOLD}  ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [${YELLOW}0${NC}${BOLD}] ${PINK}👋 Exit Script                           ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [1] 📦 Install All Dependencies              ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [2] 🚀 Start GEN Tmux Session                ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [3] 🔐 Start LOC Tmux Session                ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [4] 📂 Move swarm.pem to rl-swarm/           ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [5] ⬇️ Download swarm.pem from Google Drive  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [6] 🔍 Check GEN Session Status              ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [7] 💾 Save Login Data (Backup)              ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)            ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                           ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
-    echo -e "" # Add a new line for better spacing
 
-    read -p "${PINK}👉 Enter your choice [0-8]: ${NC}" choice
+    read -p "👉 Enter your choice [0-9]: " choice
     case $choice in
         1) install_dependencies ;;
         2) start_gen_session ;;
         3) start_loc_session ;;
         4) move_swarm_pem ;;
-        5) check_gen_session_status ;;
-        6) save_login_data ;;
-        7) restore_login_data ;;
-        8) gensyn_fixed_run ;;
-        0) echo -e "${CYAN}🚪 Exiting... Goodbye! 👋${NC}"; exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option! Please enter a number between 0-8.${NC}";;
+        5) download_swarm_pem ;;
+        6) check_gen_session_status ;;
+        7) save_login_data ;;
+        8) restore_login_data ;;
+        9) gensyn_fixed_run ;;
+        0) exit 0 ;;
+        *) echo -e "${RED}❌ Invalid option!${NC}";;
     esac
-    echo -e "" # Add extra space before next menu refresh
-    read -p "${CYAN}Press Enter to continue...${NC}" # Consistent pause
+    read -p "Press Enter to continue..."
 done
