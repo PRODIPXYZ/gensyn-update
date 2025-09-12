@@ -37,10 +37,7 @@ install_dependencies() {
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
-    
-    # gdown in user scope
-    python3 -m pip install --upgrade --user gdown
-    
+
     echo -e "${GREEN}✅ All dependencies installed!${NC}"
 }
 
@@ -154,7 +151,7 @@ gensyn_fixed_run() {
     tmux attach-session -t GEN
 }
 
-# ---------- Download, extract & move swarm.pem ----------
+# ---------- Download, extract & move swarm.pem (with venv) ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
     DOWNLOAD_DIR="$HOME/pipe_downloads"
@@ -162,13 +159,23 @@ download_extract_swarm() {
     EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
     mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
 
-    # Ask for download only if file doesn't exist
+    # create temporary venv
+    VENV_DIR="$DOWNLOAD_DIR/.venv_gdown"
+    if [ ! -d "$VENV_DIR" ]; then
+        python3 -m venv "$VENV_DIR"
+    fi
+    source "$VENV_DIR/bin/activate"
+
+    # install gdown inside venv
+    pip install --upgrade pip
+    pip install gdown
+
+    # download only if zip not exists
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
         echo -e "⚙️ Downloading zip file..."
-        python3 -m pip install --upgrade --user gdown
-        python3 -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
+        gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
         echo -e "⚠️ Zip already downloaded. Using cached copy."
     fi
@@ -202,6 +209,8 @@ download_extract_swarm() {
         rsync -a "$SEL_FOLDER/temp-data/" "$DEST/"
         echo -e "${GREEN}✅ temp-data copied to $DEST${NC}"
     fi
+
+    deactivate
 }
 
 # ---------- Move existing temp-data ----------
