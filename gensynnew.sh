@@ -86,29 +86,57 @@ move_swarm_pem() {
 download_swarm_pem() {
     echo -e "${CYAN}🔧 Checking gdown...${NC}"
     if ! command -v gdown &> /dev/null; then
-        echo -e "${YELLOW}Installing gdown...${NC}"
-        pip install gdown || (apt-get update && apt-get install -y python3-pip && pip install gdown)
+        echo -e "${YELLOW}📦 Installing gdown...${NC}"
+        sudo apt update -y
+        sudo apt install -y python3 python3-pip
+        pip3 install gdown
     fi
 
-    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
-    TMP_DIR="gdrive_temp"
-    mkdir -p $TMP_DIR && cd $TMP_DIR
+    read -p "👉 Enter Google Drive FOLDER LINK (My Gensyn): " GDRIVE_LINK
+    FOLDER_ID=$(echo "$GDRIVE_LINK" | sed -n 's#.*folders/\([^?]*\).*#\1#p')
 
-    echo -e "${CYAN}📂 Listing files...${NC}"
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
-
-    echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
-
-    if [ -f "swarm.pem" ]; then
-        mkdir -p ../rl-swarm
-        mv swarm.pem ../rl-swarm/
-        echo -e "${GREEN}✅ swarm.pem downloaded & moved to rl-swarm/${NC}"
-    else
-        echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
+    if [ -z "$FOLDER_ID" ]; then
+        echo -e "${RED}❌ Invalid Google Drive link!${NC}"
+        return
     fi
 
-    cd ..
+    echo -e "${CYAN}📂 Fetching file list...${NC}"
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run > /tmp/gdrive_list.txt
+
+    grep -oP '(?<=\[DRIVE\] ).*' /tmp/gdrive_list.txt | nl -w2 -s". " > /tmp/gdrive_menu.txt
+
+    echo ""
+    echo -e "${YELLOW}${BOLD}=== Available Peer Folders ===${NC}"
+    cat /tmp/gdrive_menu.txt
+
+    echo ""
+    read -p "👉 Select Peer ID folder number: " CHOICE
+    SELECTED=$(sed -n "${CHOICE}p" /tmp/gdrive_menu.txt | cut -d" " -f2)
+
+    if [ -z "$SELECTED" ]; then
+        echo -e "${RED}❌ Invalid selection!${NC}"
+        return
+    fi
+
+    echo -e "${CYAN}⬇️ Downloading swarm.pem from $SELECTED...${NC}"
+    DOWNLOAD_DIR="/tmp/swarm_download"
+    rm -rf "$DOWNLOAD_DIR"
+    mkdir -p "$DOWNLOAD_DIR"
+
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" -O "$DOWNLOAD_DIR" >/dev/null 2>&1
+
+    PEM_FILE=$(find "$DOWNLOAD_DIR" -type f -path "*/$SELECTED/*swarm.pem" | head -n 1)
+
+    if [ ! -f "$PEM_FILE" ]; then
+        echo -e "${RED}❌ swarm.pem not found in $SELECTED${NC}"
+        return
+    fi
+
+    mkdir -p "$HOME/rl-swarm"
+    rm -f "$HOME/rl-swarm/swarm.pem"
+    mv "$PEM_FILE" "$HOME/rl-swarm/swarm.pem"
+
+    echo -e "${GREEN}✅ swarm.pem downloaded & moved to ~/rl-swarm/swarm.pem${NC}"
 }
 
 # --- Function: Check GEN session status ---
