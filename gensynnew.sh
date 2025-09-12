@@ -25,12 +25,20 @@ print_header() {
 # ---------- Install dependencies ----------
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL DEPENDENCIES ==========${NC}"
+
+    # System packages
     sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg unzip
-    # Yarn installation
+
+    # Yarn
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
-    echo -e "${GREEN}✅ All dependencies installed!${NC}"
+
+    # Node.js v20
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install -y nodejs
+
+    echo -e "${GREEN}✅ All dependencies installed (Python, Yarn, Node.js v20)${NC}"
 }
 
 # ---------- Start GEN session ----------
@@ -126,7 +134,6 @@ restore_login_data() {
 # ---------- GENSYN FIXED RUN ----------
 gensyn_fixed_run() {
     echo -e "${GREEN}========== STEP 8: GENSYN FIXED RUN ==========${NC}"
-    # Check GEN session
     if ! tmux has-session -t GEN 2>/dev/null; then
         tmux new-session -d -s GEN
     fi
@@ -145,45 +152,44 @@ gensyn_fixed_run() {
     tmux attach-session -t GEN
 }
 
-# ---------- Step 9: Download, extract, move swarm.pem ----------
+# ---------- Option 9: Download/Extract/Move swarm.pem ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
 
-    # check unzip
+    # unzip check
     if ! command -v unzip >/dev/null 2>&1; then
-        echo -e "${YELLOW}🔧 unzip not found. Installing unzip...${NC}"
         sudo apt update && sudo apt install -y unzip
     fi
 
-    # gdown install (user install if system blocked)
+    # gdown install
     python3 -m pip install --upgrade --user gdown
 
     DOWNLOAD_DIR="$HOME/pipe_downloads"
     mkdir -p "$DOWNLOAD_DIR"
-
-    read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
-    ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
     ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
 
+    # Ask for download only if ZIP not exists
     if [ ! -f "$ZIP_FILE" ]; then
+        read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
+        ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
         echo -e "⚙️ Downloading zip file..."
         python3 -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
-        echo -e "⚠️ Zip file already downloaded. Using cached copy."
+        echo -e "⚠️ Using previously downloaded zip at $ZIP_FILE"
     fi
 
     EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
     mkdir -p "$EXTRACT_DIR"
     unzip -o "$ZIP_FILE" -d "$EXTRACT_DIR"
 
-    # list folders
-    echo -e "📂 Extracted folders:"
+    # Pretty folder listing
+    echo -e "📂 ${BOLD}${YELLOW}Extracted folders:${NC}"
     folders=()
     i=1
     for f in "$EXTRACT_DIR"/*/; do
         [ -d "$f" ] || continue
         folders+=("$f")
-        echo "$i) $(basename "$f")"
+        echo -e "${YELLOW}${BOLD}${i}) 📁 $(basename "$f")${NC}"
         ((i++))
     done
 
@@ -197,7 +203,7 @@ download_extract_swarm() {
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # copy temp-data if exists
+    # Copy temp-data if exists
     if [ -d "$SEL_FOLDER/temp-data" ]; then
         DEST="$HOME/rl-swarm/modal-login/"
         mkdir -p "$DEST"
@@ -207,7 +213,7 @@ download_extract_swarm() {
     fi
 }
 
-# ---------- Step 10: Move existing temp-data ----------
+# ---------- Option 10: Move existing temp-data ----------
 move_temp_data() {
     SRC="$HOME/rl-swarm/modal-login/temp-data"
     DEST="$HOME/rl-swarm/modal-login/"
