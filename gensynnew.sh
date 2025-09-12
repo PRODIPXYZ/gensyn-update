@@ -34,16 +34,6 @@ install_dependencies() {
 
     echo -e "${CYAN}🚀 Running Gensyn node setup script from ABHIEBA...${NC}"
     curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash
-
-    echo -e "${CYAN}🔧 Ensuring gdown is installed...${NC}"
-    if ! command -v gdown &> /dev/null; then
-        echo -e "${YELLOW}Installing gdown safely...${NC}"
-        python3 -m venv ~/gensyn_venv
-        source ~/gensyn_venv/bin/activate
-        pip install --upgrade pip
-        pip install gdown
-        echo -e "${GREEN}✅ gdown installed in virtual environment.${NC}"
-    fi
 }
 
 # --- Function: Start GEN tmux session ---
@@ -92,32 +82,46 @@ move_swarm_pem() {
     fi
 }
 
-# --- Function: Download swarm.pem from Google Drive safely ---
+# --- Function: Download swarm.pem from Google Drive (safe venv) ---
 download_swarm_pem() {
-    TMP_DIR="gdrive_temp"
-    mkdir -p $TMP_DIR
-    cd $TMP_DIR
-
-    # Use virtual environment if gdown is installed there
-    if [ -d "$HOME/gensyn_venv" ]; then
-        source $HOME/gensyn_venv/bin/activate
+    # Create venv if not exists
+    VENV_DIR="$HOME/gensyn_venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo -e "${CYAN}⚡ Creating virtual environment for gdown...${NC}"
+        python3 -m venv "$VENV_DIR"
     fi
 
-    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
-    echo -e "${CYAN}📂 Listing files in folder...${NC}"
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
+    # Activate venv
+    source "$VENV_DIR/bin/activate"
 
-    echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
+    # Upgrade pip and install gdown
+    pip install --upgrade pip
+    pip install gdown
+
+    # Ask for Google Drive folder ID
+    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
+
+    # Temp download folder
+    TMP_DIR="$HOME/gensyn_download"
+    mkdir -p "$TMP_DIR"
+    cd "$TMP_DIR" || exit
+
+    # Download swarm.pem using gdown inside venv
+    echo -e "${CYAN}⬇️ Downloading swarm.pem from Google Drive...${NC}"
     gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
 
+    # Move to rl-swarm
     if [ -f "swarm.pem" ]; then
-        mkdir -p ../rl-swarm
-        mv swarm.pem ../rl-swarm/
+        mkdir -p "$HOME/rl-swarm"
+        mv swarm.pem "$HOME/rl-swarm/"
         echo -e "${GREEN}✅ swarm.pem downloaded & moved to rl-swarm/${NC}"
     else
         echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
     fi
-    cd ..
+
+    # Deactivate venv
+    deactivate
+    cd "$HOME" || exit
 }
 
 # --- Function: Check GEN session status ---
@@ -183,8 +187,8 @@ while true; do
     echo -e "${YELLOW}${BOLD}║ [5] ⬇️ Download swarm.pem from Google Drive  ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [6] 🔍 Check GEN Session Status              ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [7] 💾 Save Login Data (Backup)              ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)            ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)           ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)           ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                           ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 
@@ -200,7 +204,7 @@ while true; do
         8) restore_login_data ;;
         9) gensyn_fixed_run ;;
         0) exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option!${NC}" ;;
+        *) echo -e "${RED}❌ Invalid option!${NC}";;
     esac
     read -p "Press Enter to continue..."
 done
