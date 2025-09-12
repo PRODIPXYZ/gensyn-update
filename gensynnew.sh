@@ -25,13 +25,12 @@ print_header() {
 # --- Function: Install all dependencies ---
 install_dependencies() {
     echo -e "${GREEN}========== STEP 1: INSTALL ALL DEPENDENCIES ==========${NC}"
-    sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg
-
+    sudo apt update
+    sudo apt install -y sudo tmux python3 python3-pip python3-venv python3-distutils curl wget screen git lsof ufw gnupg
     echo -e "${CYAN}📦 Installing Yarn...${NC}"
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
-
     echo -e "${CYAN}🚀 Running Gensyn node setup script from ABHIEBA...${NC}"
     curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash
 }
@@ -82,46 +81,43 @@ move_swarm_pem() {
     fi
 }
 
-# --- Function: Download swarm.pem from Google Drive using venv ---
+# --- Function: Download swarm.pem from Google Drive (with venv logic) ---
 download_swarm_pem() {
     VENV_DIR="$HOME/gensyn_venv"
-    TMP_DIR="$HOME/gensyn_download"
 
-    # Create venv if not exists
+    # Check/install venv
     if [ ! -d "$VENV_DIR" ]; then
         echo -e "${CYAN}⚡ Creating virtual environment for gdown...${NC}"
-        python3 -m venv "$VENV_DIR"
+        python3 -m venv "$VENV_DIR" || { echo -e "${RED}❌ venv creation failed. Install python3-venv and python3-distutils.${NC}"; return 1; }
     fi
 
-    # Upgrade pip and install gdown in venv
-    echo -e "${CYAN}📦 Installing/Upgrading gdown in venv...${NC}"
-    "$VENV_DIR/bin/pip" install --upgrade pip
-    "$VENV_DIR/bin/pip" install --upgrade gdown
+    # Activate venv
+    source "$VENV_DIR/bin/activate"
 
-    # Ask for Google Drive folder ID
-    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
+    # Install gdown inside venv
+    pip install --upgrade pip
+    pip install --upgrade gdown
 
-    # Create temp download folder
-    mkdir -p "$TMP_DIR"
-    cd "$TMP_DIR" || exit
+    read -p "👉 Enter Google Drive Folder ID or URL: " FOLDER_ID
+    TMP_DIR="gdrive_temp"
+    mkdir -p "$TMP_DIR" && cd "$TMP_DIR"
 
-    # Run gdown using venv Python explicitly
     echo -e "${CYAN}📂 Listing files in folder...${NC}"
-    "$VENV_DIR/bin/gdown" --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
+    gdown --folder "$FOLDER_ID" --quiet --dry-run
 
     echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
-    "$VENV_DIR/bin/gdown" --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
+    gdown --folder "$FOLDER_ID" --quiet --fuzzy
 
-    # Move swarm.pem to rl-swarm
     if [ -f "swarm.pem" ]; then
-        mkdir -p "$HOME/rl-swarm"
-        mv swarm.pem "$HOME/rl-swarm/"
+        mkdir -p ../rl-swarm
+        mv swarm.pem ../rl-swarm/
         echo -e "${GREEN}✅ swarm.pem downloaded & moved to rl-swarm/${NC}"
     else
         echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
     fi
 
-    cd "$HOME" || exit
+    cd ..
+    deactivate
 }
 
 # --- Function: Check GEN session status ---
@@ -135,8 +131,8 @@ check_gen_session_status() {
 
 # --- Function: Save login data ---
 save_login_data() {
-    src_path="$HOME/rl-swarm/modal-login/temp-data"
-    dest_path="$HOME/rl-swarm/backup-login"
+    src_path="${HOME}/rl-swarm/modal-login/temp-data"
+    dest_path="${HOME}/rl-swarm/backup-login"
     mkdir -p "$dest_path"
     cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
         && echo -e "${GREEN}✅ Backup saved in $dest_path${NC}" \
@@ -145,8 +141,8 @@ save_login_data() {
 
 # --- Function: Restore login data ---
 restore_login_data() {
-    src_path="$HOME/rl-swarm/backup-login"
-    dest_path="$HOME/rl-swarm/modal-login/temp-data"
+    src_path="${HOME}/rl-swarm/backup-login"
+    dest_path="${HOME}/rl-swarm/modal-login/temp-data"
     mkdir -p "$dest_path"
     cp "$src_path/userApiKey.json" "$src_path/userData.json" "$dest_path/" 2>/dev/null \
         && echo -e "${GREEN}✅ Backup restored to $dest_path${NC}" \
@@ -159,14 +155,7 @@ gensyn_fixed_run() {
         tmux new-session -d -s GEN
     fi
 
-    CORE_RUN_COMMANDS="
-        cd \"$HOME/rl-swarm\" &&
-        python3 -m venv .venv &&
-        source .venv/bin/activate &&
-        pip install --force-reinstall transformers==4.51.3 trl==0.19.1 &&
-        bash run_rl_swarm.sh;
-        exec bash
-    "
+    CORE_RUN_COMMANDS="cd \"${HOME}/rl-swarm\" && python3 -m venv .venv && source .venv/bin/activate && pip install --force-reinstall transformers==4.51.3 trl==0.19.1 && bash run_rl_swarm.sh; exec bash"
     for i in 1 2 3; do
         tmux send-keys -t GEN "$CORE_RUN_COMMANDS" C-m
         sleep 5
@@ -190,7 +179,7 @@ while true; do
     echo -e "${YELLOW}${BOLD}║ [8] ♻️ Restore Login Data (Backup)            ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [9] 🛠️ GENSYN FIXED RUN (3 Times)            ║${NC}"
     echo -e "${YELLOW}${BOLD}║ [0] 👋 Exit Script                           ║${NC}"
-    echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
+    echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝"
 
     read -p "👉 Enter your choice [0-9]: " choice
     case $choice in
