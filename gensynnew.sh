@@ -7,7 +7,6 @@ CYAN='\033[1;36m'
 GREEN='\033[1;32m'
 PINK='\033[38;5;198m'
 RED='\033[1;31m'
-MAGENTA='\033[1;35m'
 NC='\033[0m'
 
 # ---------- Header ----------
@@ -37,7 +36,10 @@ install_dependencies() {
     curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
     echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
     sudo apt update && sudo apt install -y yarn
-
+    
+    # gdown in user scope
+    python3 -m pip install --upgrade --user gdown
+    
     echo -e "${GREEN}✅ All dependencies installed!${NC}"
 }
 
@@ -151,7 +153,7 @@ gensyn_fixed_run() {
     tmux attach-session -t GEN
 }
 
-# ---------- Download, extract & move swarm.pem (with venv) ----------
+# ---------- Download, extract & move swarm.pem ----------
 download_extract_swarm() {
     echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT SWARM.PEM ==========${NC}"
     DOWNLOAD_DIR="$HOME/pipe_downloads"
@@ -159,23 +161,13 @@ download_extract_swarm() {
     EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
     mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR"
 
-    # create temporary venv
-    VENV_DIR="$DOWNLOAD_DIR/.venv_gdown"
-    if [ ! -d "$VENV_DIR" ]; then
-        python3 -m venv "$VENV_DIR"
-    fi
-    source "$VENV_DIR/bin/activate"
-
-    # install gdown inside venv
-    pip install --upgrade pip
-    pip install gdown
-
-    # download only if zip not exists
+    # Ask for download only if file doesn't exist
     if [ ! -f "$ZIP_FILE" ]; then
         read -p "🔗 Enter Google Drive zip link: " ZIP_LINK
         ZIP_ID=$(echo "$ZIP_LINK" | grep -oP '(?<=/d/)[^/]+')
         echo -e "⚙️ Downloading zip file..."
-        gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
+        python3 -m pip install --upgrade --user gdown
+        python3 -m gdown "https://drive.google.com/uc?id=$ZIP_ID" -O "$ZIP_FILE"
     else
         echo -e "⚠️ Zip already downloaded. Using cached copy."
     fi
@@ -194,6 +186,8 @@ download_extract_swarm() {
 
     read -p "👉 Enter folder number to move swarm.pem from: " sel
     SEL_FOLDER="${folders[$((sel-1))]}"
+
+    # Move swarm.pem
     if [ -f "$SEL_FOLDER/swarm.pem" ]; then
         mkdir -p "$HOME/rl-swarm"
         mv -f "$SEL_FOLDER/swarm.pem" "$HOME/rl-swarm/"
@@ -202,15 +196,13 @@ download_extract_swarm() {
         echo -e "${RED}❌ swarm.pem not found in selected folder!${NC}"
     fi
 
-    # copy nested temp-data
-    if [ -d "$SEL_FOLDER/temp-data" ]; then
+    # Copy all nested temp-data, overwrite if exists
+    find "$SEL_FOLDER" -type d -name "temp-data" | while read td; do
         DEST="$HOME/rl-swarm/modal-login/"
         mkdir -p "$DEST"
-        rsync -a "$SEL_FOLDER/temp-data/" "$DEST/"
-        echo -e "${GREEN}✅ temp-data copied to $DEST${NC}"
-    fi
-
-    deactivate
+        rsync -a --ignore-times "$td/" "$DEST/"
+    done
+    echo -e "${GREEN}✅ temp-data copied to $DEST (overwritten if existed)${NC}"
 }
 
 # ---------- Move existing temp-data ----------
