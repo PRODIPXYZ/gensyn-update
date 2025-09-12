@@ -34,6 +34,16 @@ install_dependencies() {
 
     echo -e "${CYAN}🚀 Running Gensyn node setup script from ABHIEBA...${NC}"
     curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash
+
+    echo -e "${CYAN}🔧 Ensuring gdown is installed...${NC}"
+    if ! command -v gdown &> /dev/null; then
+        echo -e "${YELLOW}Installing gdown safely...${NC}"
+        python3 -m venv ~/gensyn_venv
+        source ~/gensyn_venv/bin/activate
+        pip install --upgrade pip
+        pip install gdown
+        echo -e "${GREEN}✅ gdown installed in virtual environment.${NC}"
+    fi
 }
 
 # --- Function: Start GEN tmux session ---
@@ -82,61 +92,32 @@ move_swarm_pem() {
     fi
 }
 
-# --- Function: Download swarm.pem from Google Drive ---
+# --- Function: Download swarm.pem from Google Drive safely ---
 download_swarm_pem() {
-    echo -e "${CYAN}🔧 Checking gdown...${NC}"
-    if ! command -v gdown &> /dev/null; then
-        echo -e "${YELLOW}📦 Installing gdown...${NC}"
-        sudo apt update -y
-        sudo apt install -y python3 python3-pip
-        pip3 install gdown
+    TMP_DIR="gdrive_temp"
+    mkdir -p $TMP_DIR
+    cd $TMP_DIR
+
+    # Use virtual environment if gdown is installed there
+    if [ -d "$HOME/gensyn_venv" ]; then
+        source $HOME/gensyn_venv/bin/activate
     fi
 
-    read -p "👉 Enter Google Drive FOLDER LINK (My Gensyn): " GDRIVE_LINK
-    FOLDER_ID=$(echo "$GDRIVE_LINK" | sed -n 's#.*folders/\([^?]*\).*#\1#p')
+    read -p "👉 Enter Google Drive Folder ID: " FOLDER_ID
+    echo -e "${CYAN}📂 Listing files in folder...${NC}"
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run
 
-    if [ -z "$FOLDER_ID" ]; then
-        echo -e "${RED}❌ Invalid Google Drive link!${NC}"
-        return
+    echo -e "${CYAN}⬇️ Downloading swarm.pem ...${NC}"
+    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --fuzzy
+
+    if [ -f "swarm.pem" ]; then
+        mkdir -p ../rl-swarm
+        mv swarm.pem ../rl-swarm/
+        echo -e "${GREEN}✅ swarm.pem downloaded & moved to rl-swarm/${NC}"
+    else
+        echo -e "${RED}❌ swarm.pem not found in folder!${NC}"
     fi
-
-    echo -e "${CYAN}📂 Fetching file list...${NC}"
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" --dry-run > /tmp/gdrive_list.txt
-
-    grep -oP '(?<=\[DRIVE\] ).*' /tmp/gdrive_list.txt | nl -w2 -s". " > /tmp/gdrive_menu.txt
-
-    echo ""
-    echo -e "${YELLOW}${BOLD}=== Available Peer Folders ===${NC}"
-    cat /tmp/gdrive_menu.txt
-
-    echo ""
-    read -p "👉 Select Peer ID folder number: " CHOICE
-    SELECTED=$(sed -n "${CHOICE}p" /tmp/gdrive_menu.txt | cut -d" " -f2)
-
-    if [ -z "$SELECTED" ]; then
-        echo -e "${RED}❌ Invalid selection!${NC}"
-        return
-    fi
-
-    echo -e "${CYAN}⬇️ Downloading swarm.pem from $SELECTED...${NC}"
-    DOWNLOAD_DIR="/tmp/swarm_download"
-    rm -rf "$DOWNLOAD_DIR"
-    mkdir -p "$DOWNLOAD_DIR"
-
-    gdown --folder "https://drive.google.com/drive/folders/$FOLDER_ID" -O "$DOWNLOAD_DIR" >/dev/null 2>&1
-
-    PEM_FILE=$(find "$DOWNLOAD_DIR" -type f -path "*/$SELECTED/*swarm.pem" | head -n 1)
-
-    if [ ! -f "$PEM_FILE" ]; then
-        echo -e "${RED}❌ swarm.pem not found in $SELECTED${NC}"
-        return
-    fi
-
-    mkdir -p "$HOME/rl-swarm"
-    rm -f "$HOME/rl-swarm/swarm.pem"
-    mv "$PEM_FILE" "$HOME/rl-swarm/swarm.pem"
-
-    echo -e "${GREEN}✅ swarm.pem downloaded & moved to ~/rl-swarm/swarm.pem${NC}"
+    cd ..
 }
 
 # --- Function: Check GEN session status ---
@@ -219,7 +200,7 @@ while true; do
         8) restore_login_data ;;
         9) gensyn_fixed_run ;;
         0) exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option!${NC}";;
+        *) echo -e "${RED}❌ Invalid option!${NC}" ;;
     esac
     read -p "Press Enter to continue..."
 done
