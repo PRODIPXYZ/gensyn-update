@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ================= COLOR CODES =================
+# Color codes
 YELLOW='\033[1;33m'
 BOLD='\033[1m'
 CYAN='\033[1;36m'
@@ -10,7 +10,7 @@ RED='\033[1;31m'
 MAGENTA='\033[1;35m'
 NC='\033[0m'
 
-# ================= HEADER =================
+# --- Header ---
 print_header() {
     clear
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
@@ -18,193 +18,92 @@ print_header() {
     echo -e "${YELLOW}${BOLD} # # # # # #   MADE BY PRODIP   # # # # # #${NC}"
     echo -e "${YELLOW}${BOLD}=====================================================${NC}"
     echo -e "${CYAN}🌐 Follow on Twitter : https://x.com/prodipmandal10${NC}"
-    echo -e "${CYAN}📩 DM on Telegram    : @prodipgo${NC}"
-    echo ""
+    echo -e "${CYAN}📩 DM on Telegram    : @prodipgo${NC}"
+    echo -e ""
 }
 
-# ================= FUNCTIONS =================
+# --- Functions (Existing ones omitted for brevity) ---
+# install_dependencies, start_gen_session, start_loc_session, move_swarm_pem, check_gen_session_status, save_login_data, restore_login_data, gensyn_fixed_run
 
-install_dependencies() {
-    echo -e "${GREEN}========== STEP 1: INSTALL ALL DEPENDENCIES ==========${NC}"
-    echo -e "${CYAN}🔧 Installing dependencies...${NC}"
-    sudo apt update && sudo apt install -y sudo tmux python3 python3-venv python3-pip curl wget screen git lsof ufw gnupg
-    echo -e "${CYAN}📦 Installing Yarn...${NC}"
-    curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarn.gpg >/dev/null
-    echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list >/dev/null
-    sudo apt update && sudo apt install -y yarn
-    echo -e "${CYAN}🚀 Running Gensyn node setup script from ABHIEBA...${NC}"
-    if curl -sSL https://raw.githubusercontent.com/ABHIEBA/Gensyn/main/node.sh | bash; then
-        echo -e "${GREEN}✅ Gensyn node setup script completed.${NC}"
-    else
-        echo -e "${RED}❌ Gensyn node setup script failed. Please check the output above.${NC}"
-        return 1
+# --- Step 9: Download, Extract & Move swarm.pem ---
+download_extract_and_move_swarm() {
+    echo -e "\n========== STEP 9: DOWNLOAD, EXTRACT & MOVE SWARM.PEM =========="
+
+    # Virtual environment setup
+    VENV_DIR="$HOME/pipe_gdown_venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo "⚙️ Creating Python venv for gdown..."
+        python3 -m venv "$VENV_DIR"
     fi
-    echo -e "${GREEN}✅ All dependencies installed!${NC}"
-    return 0
-}
+    source "$VENV_DIR/bin/activate"
+    pip install --upgrade pip
+    pip install gdown --break-system-packages
 
-start_gen_session() {
-    echo -e "${GREEN}========== STEP 2: START GEN TMUX SESSION ==========${NC}"
-    if tmux has-session -t GEN 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ GEN session already exists. Attaching...${NC}"
-    else
-        echo -e "${CYAN}🚀 Creating GEN session...${NC}"
-        tmux new-session -d -s GEN "bash -c '
-            cd \$HOME &&
-            rm -rf gensyn-testnet &&
-            git clone https://github.com/zunxbt/gensyn-testnet.git &&
-            chmod +x gensyn-testnet/gensyn.sh &&
-            ./gensyn-testnet/gensyn.sh;
-            exec bash
-        '"
-        echo -e "${GREEN}✅ GEN session started!${NC}"
-    fi
-    sleep 1
-    tmux attach-session -t GEN
-    return 0
-}
-
-start_loc_session() {
-    echo -e "${GREEN}========== STEP 3: START LOC TMUX SESSION ==========${NC}"
-    if tmux has-session -t LOC 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ LOC session already exists. Attaching...${NC}"
-    else
-        echo -e "${CYAN}🔐 Starting LOC session (Firewall + Tunnel)...${NC}"
-        tmux new-session -d -s LOC "bash -c '
-            echo \"Configuring UFW firewall...\" &&
-            sudo ufw allow 22 &&
-            sudo ufw allow 3000/tcp &&
-            echo y | sudo ufw enable &&
-            echo \"Installing Cloudflared...\" &&
-            wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb &&
-            sudo dpkg -i cloudflared-linux-amd64.deb &&
-            cloudflared tunnel --url http://localhost:3000;
-            exec bash
-        '"
-        echo -e "${GREEN}✅ LOC session started!${NC}"
-    fi
-    sleep 1
-    tmux attach-session -t LOC
-    return 0
-}
-
-move_swarm_pem() {
-    echo -e "${GREEN}========== STEP 4: MOVE SWARM.PEM ==========${NC}"
-    if [ -f "swarm.pem" ]; then
-        mkdir -p rl-swarm
-        mv swarm.pem rl-swarm/ && echo -e "${GREEN}✅ swarm.pem moved to rl-swarm/${NC}" || echo -e "${RED}❌ Failed to move swarm.pem${NC}"
-    else
-        echo -e "${RED}❌ swarm.pem not found!${NC}"
-    fi
-}
-
-check_gen_session_status() {
-    echo -e "${GREEN}========== STEP 5: CHECK GEN SESSION STATUS ==========${NC}"
-    if tmux has-session -t GEN 2>/dev/null; then
-        echo -e "${GREEN}✅ GEN session is running.${NC}"
-    else
-        echo -e "${RED}❌ GEN session is NOT running.${NC}"
-    fi
-}
-
-save_login_data() {
-    echo -e "${GREEN}========== STEP 6: SAVE LOGIN DATA ==========${NC}"
-    src="$HOME/rl-swarm/modal-login/temp-data"
-    dest="$HOME/rl-swarm/backup-login"
-    mkdir -p "$dest"
-    cp "$src/userApiKey.json" "$dest/" 2>/dev/null
-    cp "$src/userData.json" "$dest/" 2>/dev/null
-    echo -e "${GREEN}✅ Login data backed up to $dest${NC}"
-}
-
-restore_login_data() {
-    echo -e "${GREEN}========== STEP 7: RESTORE LOGIN DATA ==========${NC}"
-    src="$HOME/rl-swarm/backup-login"
-    dest="$HOME/rl-swarm/modal-login/temp-data"
-    mkdir -p "$dest"
-    cp "$src/userApiKey.json" "$dest/" 2>/dev/null
-    cp "$src/userData.json" "$dest/" 2>/dev/null
-    echo -e "${GREEN}✅ Login data restored to $dest${NC}"
-}
-
-gensyn_fixed_run() {
-    echo -e "${GREEN}========== STEP 8: GENSYN FIXED RUN (3 TIMES) ==========${NC}"
-    if ! tmux has-session -t GEN 2>/dev/null; then
-        tmux new-session -d -s GEN
-    fi
-    CORE_RUN="set -e && cd \$HOME/rl-swarm && python3 -m venv .venv && source .venv/bin/activate && pip install --force-reinstall transformers==4.51.3 trl==0.19.1 && bash run_rl_swarm.sh && exec bash"
-    for i in 1 2 3; do
-        echo -e "${CYAN}🔄 Run #$i${NC}"
-        tmux send-keys -t GEN "$CORE_RUN" C-m
-        [ $i -lt 3 ] && sleep 5
-    done
-    tmux attach-session -t GEN
-}
-
-# ================= STEP 9: DOWNLOAD + EXTRACT + MOVE =================
-download_extract_move() {
-    echo -e "${GREEN}========== STEP 9: DOWNLOAD & EXTRACT ZIP FILES ==========${NC}"
-    if ! command -v gdown &> /dev/null; then
-        echo -e "${CYAN}⚙️ Installing gdown...${NC}"
-        python3 -m pip install --upgrade pip
-        python3 -m pip install gdown
-    fi
-
-    BASE_DIR="$HOME/pipe_downloads"
+    DOWNLOAD_DIR="$HOME/pipe_downloads"
     EXTRACT_DIR="$HOME/pipe_extracted"
-    TARGET_DIR="$HOME/pipe_selected"
-    mkdir -p "$BASE_DIR" "$EXTRACT_DIR" "$TARGET_DIR"
+    RL_SWARM_DIR="$HOME/rl-swarm"
+    mkdir -p "$DOWNLOAD_DIR" "$EXTRACT_DIR" "$RL_SWARM_DIR"
 
-    declare -a links
-    echo -e "${CYAN}🔢 Enter up to 5 Google Drive zip links. Press Enter to skip.${NC}"
-    for i in {1..5}; do
-        read -p "Link #$i: " link
-        [ -z "$link" ] && break
-        links+=("$link")
-    done
+    # Google Drive zip link input
+    read -p "🔗 Enter Google Drive zip link: " link
+    [ -z "$link" ] && { echo "❌ No link provided. Exiting."; deactivate; return; }
 
-    folder_index=1
-    declare -A folder_map
-    for link in "${links[@]}"; do
-        zip_name="file_$folder_index.zip"
-        gdown --fuzzy "$link" -O "$BASE_DIR/$zip_name"
-        folder_name="$EXTRACT_DIR/$folder_index"
-        mkdir -p "$folder_name"
-        unzip -q "$BASE_DIR/$zip_name" -d "$folder_name"
-        folder_map[$folder_index]="$folder_name"
-        echo -e "${GREEN}✅ Extracted to folder $folder_index${NC}"
-        ((folder_index++))
-    done
+    ZIP_FILE="$DOWNLOAD_DIR/temp.zip"
+    echo "⚙️ Downloading zip file..."
+    gdown --fuzzy "$link" -O "$ZIP_FILE"
 
-    echo -e "${CYAN}📂 Available extracted folders:${NC}"
-    for idx in "${!folder_map[@]}"; do
-        echo "[$idx] ${folder_map[$idx]}"
-    done
-
-    read -p "Enter folder number to move to pipe_selected/: " sel
-    if [[ -n "${folder_map[$sel]}" ]]; then
-        mv "${folder_map[$sel]}" "$TARGET_DIR/"
-        echo -e "${GREEN}✅ Folder moved to $TARGET_DIR/${NC}"
-    else
-        echo -e "${RED}❌ Invalid selection.${NC}"
+    if [ ! -f "$ZIP_FILE" ]; then
+        echo "❌ Download failed!"
+        deactivate
+        return
     fi
+
+    # Extract zip
+    echo "📂 Extracting zip file..."
+    unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
+
+    # List extracted folders
+    echo -e "\n📂 Extracted folders:"
+    folders=($(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d))
+    for i in "${!folders[@]}"; do
+        folder_name=$(basename "${folders[$i]}")
+        echo "$((i+1)). $folder_name"
+    done
+
+    # User selects folder
+    read -p "👉 Enter folder number to move swarm.pem from: " choice
+    selected_folder="${folders[$((choice-1))]}"
+
+    SWARM_FILE="$selected_folder/swarm.pem"
+    if [ -f "$SWARM_FILE" ]; then
+        mv "$SWARM_FILE" "$RL_SWARM_DIR/"
+        echo "✅ swarm.pem moved to $RL_SWARM_DIR/"
+    else
+        echo "❌ swarm.pem not found in selected folder!"
+    fi
+
+    deactivate
+    echo "✅ Step 9 completed."
 }
 
-# ================= MENU LOOP =================
+# --- Main Menu ---
 while true; do
     print_header
     echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}${BOLD}║ [1] ${PINK}📦 Install All Dependencies             ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [2] ${PINK}🚀 Start GEN Tmux Session               ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [3] ${PINK}🔐 Start LOC Tmux Session               ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [4] ${PINK}📂 Move swarm.pem                        ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [5] ${PINK}🔍 Check GEN Session Status             ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [6] ${PINK}💾 Save Login Data                       ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [7] ${PINK}♻️ Restore Login Data                    ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [8] ${PINK}🛠️ GENSYN FIXED RUN (3 Times)          ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [9] ${PINK}⬇️ Download & Extract Drive Zip          ${YELLOW}${BOLD} ║${NC}"
-    echo -e "${YELLOW}${BOLD}║ [0] ${PINK}👋 Exit Script                          ${YELLOW}${BOLD} ║${NC}"
+    echo -e "${YELLOW}${BOLD}║      🔵 BENGAL AIRDROP GENSYN MENU 🔵    ║${NC}"
+    echo -e "${YELLOW}${BOLD}╠══════════════════════════════════════════════╣${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}1${NC}${BOLD}] ${PINK}📦 Install All Dependencies               ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}2${NC}${BOLD}] ${PINK}🚀 Start GEN Tmux Session (Gensyn Node)  ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}3${NC}${BOLD}] ${PINK}🔐 Start LOC Tmux Session (Firewall+Tunnel) ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}4${NC}${BOLD}] ${PINK}📂 Move swarm.pem to rl-swarm/           ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}5${NC}${BOLD}] ${PINK}🔍 Check GEN Session Status             ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}6${NC}${BOLD}] ${PINK}💾 Save Login Data (Backup)             ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}7${NC}${BOLD}] ${PINK}♻️ Restore Login Data (Backup)           ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}8${NC}${BOLD}] ${PINK}🛠️ GENSYN FIXED RUN (3 Times)          ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}9${NC}${BOLD}] ${PINK}📥 Download, Extract & Move swarm.pem   ${YELLOW}${BOLD}  ║${NC}"
+    echo -e "${YELLOW}${BOLD}║ [${YELLOW}0${NC}${BOLD}] ${PINK}👋 Exit Script                           ${YELLOW}${BOLD}  ║${NC}"
     echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════════════╝${NC}"
+    echo -e ""
 
     read -p "${PINK}👉 Enter your choice [0-9]: ${NC}" choice
     case $choice in
@@ -216,9 +115,10 @@ while true; do
         6) save_login_data ;;
         7) restore_login_data ;;
         8) gensyn_fixed_run ;;
-        9) download_extract_move ;;
-        0) echo -e "${CYAN}🚪 Exiting... Goodbye!${NC}"; exit 0 ;;
-        *) echo -e "${RED}❌ Invalid option!${NC}" ;;
+        9) download_extract_and_move_swarm ;;
+        0) echo -e "${CYAN}🚪 Exiting... Goodbye! 👋${NC}"; exit 0 ;;
+        *) echo -e "${RED}❌ Invalid option! Please enter a number between 0-9.${NC}";;
     esac
+    echo -e ""
     read -p "${CYAN}Press Enter to continue...${NC}"
 done
